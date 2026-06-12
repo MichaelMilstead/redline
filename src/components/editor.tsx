@@ -4,17 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  Feedback,
-  feedbackPluginKey,
-  buildTextAndMap,
-  type FeedbackDecoration,
-} from "./feedback-extension";
+import { Feedback, feedbackPluginKey } from "./feedback-extension";
 import FeedbackPanel, {
   FEEDBACK_PANEL_WIDTH,
   type FeedbackItem,
   type Suggestion,
 } from "./feedback-panel";
+import { useFeedback } from "./use-feedback";
 
 type Pinned = { item: FeedbackItem; top: number; left: number };
 
@@ -36,10 +32,24 @@ export default function Editor() {
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<FeedbackItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [pinned, setPinned] = useState<Pinned | null>(null);
+
+  // Defer auto-generation while a panel is open so feedback doesn't change out
+  // from under the user mid-interaction.
+  const pinnedRef = useRef<Pinned | null>(null);
+  useEffect(() => {
+    pinnedRef.current = pinned;
+  }, [pinned]);
+
+  const { loading, items, error, setItems, generate, resume } = useFeedback(
+    editor,
+    { shouldDefer: () => pinnedRef.current !== null },
+  );
+
+  // Resume a deferred run once the panel closes.
+  useEffect(() => {
+    if (pinned === null) resume();
+  }, [pinned, resume]);
 
   // Open the panel when a highlight is clicked; close it on a click elsewhere or
   // on Escape. A click inside the panel itself (e.g. an accept button) is ignored
@@ -82,60 +92,6 @@ export default function Editor() {
     };
   }, [items]);
 
-  async function getFeedback() {
-    if (!editor) return;
-    const { text, map } = buildTextAndMap(editor.state.doc);
-    if (!text.trim()) {
-      setError("Write something first.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setPinned(null);
-    setItems([]);
-    editor.view.dispatch(editor.state.tr.setMeta(feedbackPluginKey, []));
-
-    try {
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
-        return;
-      }
-
-      const nextItems: FeedbackItem[] = (
-        data.feedback as Omit<FeedbackItem, "id">[]
-      ).map((f, i) => ({ id: `fb-${i}`, ...f }));
-      setItems(nextItems);
-
-      // Convert character ranges into ProseMirror positions via the map.
-      const docSize = editor.state.doc.content.size;
-      const decorations: FeedbackDecoration[] = nextItems.flatMap((item) => {
-        if (!item.range) return [];
-        const { start, end } = item.range;
-        if (start < 0 || end > map.length || start >= end) return [];
-        const from = map[start];
-        const to = map[end - 1] + 1;
-        if (from == null || to == null || to > docSize) return [];
-        return [
-          { id: item.id, from, to, severity: item.severity, quote: item.quote },
-        ];
-      });
-      editor.view.dispatch(
-        editor.state.tr.setMeta(feedbackPluginKey, decorations),
-      );
-    } catch {
-      setError("Request failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   /** Replace the note's span with a chosen rewrite, then drop that note. */
   function acceptSuggestion(item: FeedbackItem, suggestion: Suggestion) {
     if (!editor) return;
@@ -159,6 +115,13 @@ export default function Editor() {
 
   return (
     <div>
+      {loading && (
+        <div className="fixed right-4 top-4 z-50 flex items-center gap-2 text-xs font-medium text-sky-400/80">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400/80" />
+          Generating feedback…
+        </div>
+      )}
+
       <div ref={containerRef} className="relative">
         <EditorContent editor={editor} />
 
@@ -175,18 +138,21 @@ export default function Editor() {
 
       <div className="mt-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
         <button
-          onClick={getFeedback}
+          onClick={() => {
+            setPinned(null);
+            generate(true);
+          }}
           disabled={loading}
           className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
         >
-          {loading ? "Getting feedback…" : "Get feedback"}
+          {loading ? "Getting feedback…" : "Refresh feedback"}
         </button>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         {!error && !loading && items.length === 0 && (
           <p className="mt-3 text-sm text-neutral-500">
-            Feedback appears as colored highlights — click one to read it and
-            accept a rewrite.
+            Feedback generates automatically as you write, and appears as colored
+            highlights — click one to read it and accept a rewrite.
           </p>
         )}
       </div>
