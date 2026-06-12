@@ -21,6 +21,9 @@ export type FeedbackDecoration = {
   from: number;
   to: number;
   severity: Severity;
+  /** The text this note was written about. Used to detect when an edit has made
+   * the note stale (the highlighted text no longer matches). */
+  quote: string;
 };
 
 export const feedbackPluginKey = new PluginKey<DecorationSet>("feedback");
@@ -88,12 +91,24 @@ export const Feedback = Extension.create({
                   },
                   // spec: read back via decorationSet.find() to get a note's
                   // *current* range after edits shift positions.
-                  { id: f.id, severity: f.severity },
+                  { id: f.id, severity: f.severity, quote: f.quote },
                 ),
               );
               return DecorationSet.create(tr.doc, decorations);
             }
-            return old.map(tr.mapping, tr.doc);
+
+            const mapped = old.map(tr.mapping, tr.doc);
+            if (!tr.docChanged) return mapped;
+
+            // A note is stale once its highlighted text no longer matches the
+            // text it was written about — drop those. Pure position shifts (from
+            // edits elsewhere) leave the text unchanged, so they're kept.
+            const stale = mapped
+              .find()
+              .filter(
+                (d) => tr.doc.textBetween(d.from, d.to, "\n\n") !== d.spec.quote,
+              );
+            return stale.length ? mapped.remove(stale) : mapped;
           },
         },
         props: {

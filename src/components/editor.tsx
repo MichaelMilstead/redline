@@ -91,7 +91,9 @@ export default function Editor() {
         const from = map[start];
         const to = map[end - 1] + 1;
         if (from == null || to == null || to > docSize) return [];
-        return [{ id: item.id, from, to, severity: item.severity }];
+        return [
+          { id: item.id, from, to, severity: item.severity, quote: item.quote },
+        ];
       });
       editor.view.dispatch(
         editor.state.tr.setMeta(feedbackPluginKey, decorations),
@@ -112,26 +114,13 @@ export default function Editor() {
     const deco = decoSet?.find().find((d) => d.spec?.id === item.id);
     if (!deco) return;
 
+    // Replacing the span deletes its decoration automatically; the other notes
+    // keep their text and so survive the staleness check in the plugin.
     editor
       .chain()
       .focus()
       .insertContentAt({ from: deco.from, to: deco.to }, suggestion.text)
       .run();
-
-    // Rebuild the remaining decorations from their now-mapped positions,
-    // dropping the accepted note.
-    const after = feedbackPluginKey.getState(editor.state);
-    const remaining: FeedbackDecoration[] = (after?.find() ?? [])
-      .filter((d) => d.spec?.id !== item.id)
-      .map((d) => ({
-        id: d.spec.id,
-        from: d.from,
-        to: d.to,
-        severity: d.spec.severity,
-      }));
-    editor.view.dispatch(
-      editor.state.tr.setMeta(feedbackPluginKey, remaining),
-    );
 
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     setHovered(null);
