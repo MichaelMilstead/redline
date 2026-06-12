@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Writer
 
-## Getting Started
+A proof-of-concept writing app with AI-assisted feedback. You write in a
+distraction-free editor, and as you pause, the app surfaces inline editorial
+notes anchored to specific spans of your text with suggested rewrites you
+can accept with a click.
 
-First, run the development server:
+> ⚠️ This is a POC, not a production app. It favors clarity over completeness,
+> makes a fresh model call on each generation, and has no auth, persistence, or
+> rate limiting.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## What it does
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Automatic feedback** — a beat after you stop typing, the app sends your text
+  to Claude and gets back notes anchored to exact spans. Notes appear as colored
+  inline highlights (orange = suggestion, red = issue).
+- **Click to review** — click a highlight to open a pinned panel showing the
+  note plus two suggested rewrites in different styles.
+- **Accept a rewrite** — accepting replaces the highlighted span in place.
+- **Stays in sync** — a note disappears if you edit its text (the feedback no
+  longer applies), and accepting a rewrite doesn't trigger a new round of
+  feedback.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/api/feedback/route.ts` — calls the Claude API ([Anthropic
+  SDK](https://github.com/anthropics/anthropic-sdk-typescript)) with the
+  document text and returns structured notes. The model returns a verbatim
+  `quote` for each note; the server resolves it to a character range (models
+  copy text reliably but count offsets poorly).
+- `src/components/feedback-extension.ts` — a ProseMirror plugin that renders the
+  notes as inline decorations and drops a note when its underlying text changes.
+- `src/components/use-feedback.ts` — owns the generation lifecycle: debounced
+  auto-runs, request cancellation, and applying the results.
+- `src/components/feedback-panel.tsx` / `editor.tsx` — the review UI.
 
-## Learn More
+## Running locally
 
-To learn more about Next.js, take a look at the following resources:
+**Prerequisites:** Node.js 18.18+ and an
+[Anthropic API key](https://console.anthropic.com/).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Install dependencies:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   npm install
+   ```
 
-## Deploy on Vercel
+2. Add your API key to a `.env.local` file in the project root:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. Start the dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000) and start writing. After
+   you pause, feedback highlights will appear; click one to review and accept a
+   rewrite. (You can also click **Refresh feedback** to regenerate on demand.)
+
+## Scripts
+
+| Command         | Description                  |
+| --------------- | ---------------------------- |
+| `npm run dev`   | Start the development server |
+| `npm run build` | Production build             |
+| `npm run start` | Serve the production build   |
+| `npm run lint`  | Run ESLint                   |
+
+## Tech stack
+
+Next.js (App Router) · TypeScript · Tailwind CSS · Tiptap / ProseMirror ·
+Anthropic Claude API
