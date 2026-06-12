@@ -37,7 +37,11 @@ body {
 
 /* Inline feedback highlights, colored by severity */
 .feedback {
-  cursor: help;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.feedback:hover {
+  opacity: 0.6;
 }
 .feedback-suggestion {
   color: #d97706;

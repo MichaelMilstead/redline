@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -9,23 +9,14 @@ import {
   feedbackPluginKey,
   buildTextAndMap,
   type FeedbackDecoration,
-  type Severity,
 } from "./feedback-extension";
+import FeedbackPanel, {
+  FEEDBACK_PANEL_WIDTH,
+  type FeedbackItem,
+  type Suggestion,
+} from "./feedback-panel";
 
-type Suggestion = { style: string; text: string };
-
-/** A feedback note as held in component state. `range` is character offsets into
- * the submitted text; `suggestions` are alternative rewrites of the quoted span. */
-type FeedbackItem = {
-  id: string;
-  quote: string;
-  comment: string;
-  severity: Severity;
-  suggestions: Suggestion[];
-  range: { start: number; end: number } | null;
-};
-
-type Hovered = { item: FeedbackItem; top: number; left: number };
+type Pinned = { item: FeedbackItem; top: number; left: number };
 
 export default function Editor() {
   const editor = useEditor({
@@ -45,11 +36,51 @@ export default function Editor() {
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const closeTimer = useRef<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<Hovered | null>(null);
+  const [pinned, setPinned] = useState<Pinned | null>(null);
+
+  // Open the panel when a highlight is clicked; close it on a click elsewhere or
+  // on Escape. A click inside the panel itself (e.g. an accept button) is ignored
+  // here so it stays open.
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-feedback-popover]")) return;
+
+      const el = target.closest<HTMLElement>("[data-feedback-id]");
+      if (!el || !containerRef.current) {
+        setPinned(null);
+        return;
+      }
+      const item = items.find(
+        (f) => f.id === el.getAttribute("data-feedback-id"),
+      );
+      if (!item) {
+        setPinned(null);
+        return;
+      }
+      const c = containerRef.current.getBoundingClientRect();
+      const left = Math.max(
+        0,
+        Math.min(e.clientX - c.left, c.width - FEEDBACK_PANEL_WIDTH),
+      );
+      const top = e.clientY - c.top + 12;
+      setPinned({ item, top, left });
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPinned(null);
+    }
+
+    document.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [items]);
 
   async function getFeedback() {
     if (!editor) return;
@@ -61,7 +92,7 @@ export default function Editor() {
 
     setLoading(true);
     setError(null);
-    setHovered(null);
+    setPinned(null);
     setItems([]);
     editor.view.dispatch(editor.state.tr.setMeta(feedbackPluginKey, []));
 
@@ -123,83 +154,22 @@ export default function Editor() {
       .run();
 
     setItems((prev) => prev.filter((i) => i.id !== item.id));
-    setHovered(null);
-  }
-
-  function cancelClose() {
-    if (closeTimer.current !== null) {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  }
-
-  function scheduleClose() {
-    cancelClose();
-    closeTimer.current = window.setTimeout(() => setHovered(null), 150);
-  }
-
-  function handleMouseOver(e: React.MouseEvent) {
-    const target = e.target as HTMLElement;
-    if (target.closest("[data-feedback-popover]")) {
-      cancelClose();
-      return;
-    }
-    const el = target.closest<HTMLElement>("[data-feedback-id]");
-    if (!el || !containerRef.current) {
-      scheduleClose();
-      return;
-    }
-    cancelClose();
-    const item = items.find((f) => f.id === el.getAttribute("data-feedback-id"));
-    if (!item) return;
-    const c = containerRef.current.getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    setHovered({ item, top: r.bottom - c.top + 2, left: r.left - c.left });
+    setPinned(null);
   }
 
   return (
     <div>
-      <div
-        ref={containerRef}
-        className="relative"
-        onMouseOver={handleMouseOver}
-        onMouseLeave={scheduleClose}
-      >
+      <div ref={containerRef} className="relative">
         <EditorContent editor={editor} />
 
-        {hovered && (
-          <div
-            data-feedback-popover
-            className="absolute z-10 w-72 rounded-md border border-neutral-200 bg-white p-3 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
-            style={{ top: hovered.top, left: hovered.left }}
-            onMouseEnter={cancelClose}
-            onMouseLeave={scheduleClose}
-          >
-            <span className="block text-xs font-medium uppercase tracking-wide text-neutral-500">
-              {hovered.item.severity}
-            </span>
-            <p className="mt-1">{hovered.item.comment}</p>
-
-            {hovered.item.suggestions.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                <p className="text-xs font-medium text-neutral-500">
-                  Suggested rewrites
-                </p>
-                {hovered.item.suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => acceptSuggestion(hovered.item, s)}
-                    className="block w-full rounded border border-neutral-200 p-2 text-left transition-colors hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
-                  >
-                    <span className="text-xs font-medium text-neutral-500">
-                      {s.style}
-                    </span>
-                    <span className="mt-0.5 block">{s.text}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {pinned && (
+          <FeedbackPanel
+            item={pinned.item}
+            top={pinned.top}
+            left={pinned.left}
+            onClose={() => setPinned(null)}
+            onAccept={(s) => acceptSuggestion(pinned.item, s)}
+          />
         )}
       </div>
 
@@ -215,7 +185,7 @@ export default function Editor() {
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         {!error && !loading && items.length === 0 && (
           <p className="mt-3 text-sm text-neutral-500">
-            Feedback appears as colored highlights — hover one to read it and
+            Feedback appears as colored highlights — click one to read it and
             accept a rewrite.
           </p>
         )}
