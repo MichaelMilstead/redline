@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Expected { content: string }", details: parsed.error.flatten() },
+      { error: "Expected { content: string }", details: parsed.error.issues },
       { status: 400 },
     );
   }
