@@ -39,9 +39,6 @@ body {
 .feedback {
   cursor: help;
 }
-.feedback-praise {
-  color: #16a34a;
-}
 .feedback-suggestion {
   color: #d97706;
 }

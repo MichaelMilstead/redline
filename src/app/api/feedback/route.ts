@@ -17,7 +17,7 @@ const RequestSchema = z.object({
   content: z.string().min(1),
 });
 
-const Severity = z.enum(["praise", "suggestion", "issue"]);
+const Severity = z.enum(["suggestion", "issue"]);
 
 /**
  * A proposed rewrite of the quoted span. Each suggestion takes a different
@@ -50,7 +50,7 @@ const ModelFeedback = z.object({
       suggestions: z
         .array(SuggestionSchema)
         .describe(
-          "For 'issue' and 'suggestion' notes, exactly 2 alternative rewrites of the quoted span, each in a distinctly different style. Empty for 'praise'.",
+          "Exactly 2 alternative rewrites of the quoted span, each in a distinctly different style.",
         ),
     }),
   ),
@@ -63,8 +63,8 @@ You will be given a document (or an excerpt). Return a list of specific, actiona
 Rules for each note:
 - "quote" MUST be copied verbatim from the document, character for character, including punctuation and capitalization. Do not paraphrase, trim, or normalize it — it is used to locate the passage. Keep it as short as possible while still uniquely identifying the spot (a phrase or sentence, not a whole paragraph).
 - "comment" is your note about that span: what works, what doesn't, and how to improve it.
-- "severity" is "praise" for something done well, "suggestion" for an optional improvement, or "issue" for a real problem.
-- "suggestions": for "issue" and "suggestion" notes, provide exactly 2 rewrites of the quoted span, each taking a clearly different stylistic approach (for example one more concise and one more vivid, or one formal and one plain). Each suggestion's "text" must be a drop-in replacement for the quoted span — it should read naturally in place of the quote, with no surrounding context. For "praise" notes, return an empty "suggestions" array.
+- "severity" is "suggestion" for an optional improvement or "issue" for a real problem.
+- "suggestions": provide exactly 2 rewrites of the quoted span, each taking a clearly different stylistic approach (for example one more concise and one more vivid, or one formal and one plain). Each suggestion's "text" must be a drop-in replacement for the quoted span — it should read naturally in place of the quote, with no surrounding context.
 
 Only comment on spans that genuinely warrant a note. If the writing is strong, return fewer notes. Return an empty list if there is nothing worth saying.`;
 

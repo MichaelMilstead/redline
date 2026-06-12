@@ -3,7 +3,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-export type Severity = "praise" | "suggestion" | "issue";
+export type Severity = "suggestion" | "issue";
 
 /**
  * A single decoration to render. It carries only what the view needs: where to
