@@ -140,27 +140,6 @@ export default function Editor() {
           />
         )}
       </div>
-
-      <div className="mt-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-        <button
-          onClick={() => {
-            setPinned(null);
-            generate(true);
-          }}
-          disabled={loading}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900"
-        >
-          {loading ? "Getting feedback…" : "Refresh feedback"}
-        </button>
-
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        {!error && !loading && items.length === 0 && (
-          <p className="mt-3 text-sm text-neutral-500">
-            Feedback generates automatically as you write, and appears as colored
-            highlights — click one to read it and accept a rewrite.
-          </p>
-        )}
-      </div>
     </div>
   );
 }
