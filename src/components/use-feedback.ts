@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import type { Transaction } from "@tiptap/pm/state";
 import {
   buildTextAndMap,
   feedbackPluginKey,
@@ -11,6 +12,10 @@ import type { FeedbackItem } from "./feedback-panel";
 
 const DEBOUNCE_MS = 2500; // generate this long after the user stops typing
 const MIN_INTERVAL_MS = 6000; // never auto-generate more often than this
+
+/** Set this meta on a transaction to keep it from scheduling a regeneration
+ * (e.g. when accepting a suggestion — that edit shouldn't trigger new feedback). */
+export const SKIP_REGEN_META = "skip-feedback-regen";
 
 type Options = {
   /** Return true to defer an auto-run (e.g. while the user has a panel open).
@@ -137,10 +142,14 @@ export function useFeedback(editor: Editor | null, options: Options = {}) {
     }, DEBOUNCE_MS);
   }, [generate]);
 
-  // Re-run feedback a beat after the user stops typing.
+  // Re-run feedback a beat after the user stops typing — unless the change opted
+  // out (accepting a suggestion).
   useEffect(() => {
     if (!editor) return;
-    const onUpdate = () => schedule();
+    const onUpdate = ({ transaction }: { transaction: Transaction }) => {
+      if (transaction.getMeta(SKIP_REGEN_META)) return;
+      schedule();
+    };
     editor.on("update", onUpdate);
     return () => {
       editor.off("update", onUpdate);

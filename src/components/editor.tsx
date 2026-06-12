@@ -10,7 +10,7 @@ import FeedbackPanel, {
   type FeedbackItem,
   type Suggestion,
 } from "./feedback-panel";
-import { useFeedback } from "./use-feedback";
+import { useFeedback, SKIP_REGEN_META } from "./use-feedback";
 
 type Pinned = { item: FeedbackItem; top: number; left: number };
 
@@ -102,10 +102,15 @@ export default function Editor() {
     if (!deco) return;
 
     // Replacing the span deletes its decoration automatically; the other notes
-    // keep their text and so survive the staleness check in the plugin.
+    // keep their text and so survive the staleness check in the plugin. Tag the
+    // transaction so this edit doesn't itself trigger a feedback regeneration.
     editor
       .chain()
       .focus()
+      .command(({ tr }) => {
+        tr.setMeta(SKIP_REGEN_META, true);
+        return true;
+      })
       .insertContentAt({ from: deco.from, to: deco.to }, suggestion.text)
       .run();
 
