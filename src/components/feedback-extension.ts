@@ -79,10 +79,17 @@ export const Feedback = Extension.create({
               | undefined;
             if (next) {
               const decorations = next.map((f) =>
-                Decoration.inline(f.from, f.to, {
-                  class: `feedback feedback-${f.severity}`,
-                  "data-feedback-id": f.id,
-                }),
+                Decoration.inline(
+                  f.from,
+                  f.to,
+                  {
+                    class: `feedback feedback-${f.severity}`,
+                    "data-feedback-id": f.id,
+                  },
+                  // spec: read back via decorationSet.find() to get a note's
+                  // *current* range after edits shift positions.
+                  { id: f.id, severity: f.severity },
+                ),
               );
               return DecorationSet.create(tr.doc, decorations);
             }

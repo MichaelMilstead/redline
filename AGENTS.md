@@ -11,5 +11,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # API
 
-- `POST /api/feedback` — takes `{ content: string }` (the full editor text or a selected snippet) and returns `{ feedback: [{ quote, comment, severity, range }] }`. Each `range` is `{ start, end }` character offsets into the submitted `content` (or `null` if the quote couldn't be located). The model returns verbatim quotes; the route resolves them to offsets in `src/app/api/feedback/route.ts`.
+- `POST /api/feedback` — takes `{ content: string }` (the full editor text or a selected snippet) and returns `{ feedback: [{ quote, comment, severity, range, suggestions }] }`. Each `range` is `{ start, end }` character offsets into the submitted `content` (or `null` if the quote couldn't be located). `suggestions` is an array of `{ style, text }` rewrites of the quoted span (2 for `issue`/`suggestion` notes, empty for `praise`); accepting one replaces the span. The model returns verbatim quotes; the route resolves them to offsets in `src/app/api/feedback/route.ts`.
 - Uses the Anthropic SDK (`claude-opus-4-8`). Requires `ANTHROPIC_API_KEY` in the environment (e.g. `.env.local`).

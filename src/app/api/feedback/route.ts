@@ -20,6 +20,21 @@ const RequestSchema = z.object({
 const Severity = z.enum(["praise", "suggestion", "issue"]);
 
 /**
+ * A proposed rewrite of the quoted span. Each suggestion takes a different
+ * stylistic approach so the user can choose. `text` replaces the quote verbatim.
+ */
+const SuggestionSchema = z.object({
+  style: z
+    .string()
+    .describe(
+      "A short label for this rewrite's approach, e.g. 'Concise', 'Formal', 'Vivid', 'Plain'.",
+    ),
+  text: z
+    .string()
+    .describe("The rewritten text that replaces the quoted span."),
+});
+
+/**
  * What we ask the model for. The model returns an exact verbatim `quote` rather
  * than character indices — models are reliable at copying text and unreliable at
  * counting offsets. We resolve each quote to a range server-side below.
@@ -32,6 +47,11 @@ const ModelFeedback = z.object({
         .describe("The exact, verbatim span of the document this note is about."),
       comment: z.string().describe("The feedback itself."),
       severity: Severity,
+      suggestions: z
+        .array(SuggestionSchema)
+        .describe(
+          "For 'issue' and 'suggestion' notes, exactly 2 alternative rewrites of the quoted span, each in a distinctly different style. Empty for 'praise'.",
+        ),
     }),
   ),
 });
@@ -44,13 +64,17 @@ Rules for each note:
 - "quote" MUST be copied verbatim from the document, character for character, including punctuation and capitalization. Do not paraphrase, trim, or normalize it — it is used to locate the passage. Keep it as short as possible while still uniquely identifying the spot (a phrase or sentence, not a whole paragraph).
 - "comment" is your note about that span: what works, what doesn't, and how to improve it.
 - "severity" is "praise" for something done well, "suggestion" for an optional improvement, or "issue" for a real problem.
+- "suggestions": for "issue" and "suggestion" notes, provide exactly 2 rewrites of the quoted span, each taking a clearly different stylistic approach (for example one more concise and one more vivid, or one formal and one plain). Each suggestion's "text" must be a drop-in replacement for the quoted span — it should read naturally in place of the quote, with no surrounding context. For "praise" notes, return an empty "suggestions" array.
 
 Only comment on spans that genuinely warrant a note. If the writing is strong, return fewer notes. Return an empty list if there is nothing worth saying.`;
+
+type Suggestion = z.infer<typeof SuggestionSchema>;
 
 type ResolvedFeedback = {
   quote: string;
   comment: string;
   severity: z.infer<typeof Severity>;
+  suggestions: Suggestion[];
   /** Character offsets into the submitted content, or null if the quote couldn't be located. */
   range: { start: number; end: number } | null;
 };

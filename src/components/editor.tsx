@@ -12,13 +12,16 @@ import {
   type Severity,
 } from "./feedback-extension";
 
+type Suggestion = { style: string; text: string };
+
 /** A feedback note as held in component state. `range` is character offsets into
- * the submitted text; `suggestion` is reserved for future suggested rewrites. */
+ * the submitted text; `suggestions` are alternative rewrites of the quoted span. */
 type FeedbackItem = {
   id: string;
   quote: string;
   comment: string;
   severity: Severity;
+  suggestions: Suggestion[];
   range: { start: number; end: number } | null;
 };
 
@@ -42,6 +45,7 @@ export default function Editor() {
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -99,19 +103,69 @@ export default function Editor() {
     }
   }
 
-  function handleMouseOver(e: React.MouseEvent) {
-    const el = (e.target as HTMLElement).closest<HTMLElement>(
-      "[data-feedback-id]",
+  /** Replace the note's span with a chosen rewrite, then drop that note. */
+  function acceptSuggestion(item: FeedbackItem, suggestion: Suggestion) {
+    if (!editor) return;
+    // Read the note's CURRENT range from the decoration set — earlier accepts or
+    // edits may have shifted it from the position we first computed.
+    const decoSet = feedbackPluginKey.getState(editor.state);
+    const deco = decoSet?.find().find((d) => d.spec?.id === item.id);
+    if (!deco) return;
+
+    editor
+      .chain()
+      .focus()
+      .insertContentAt({ from: deco.from, to: deco.to }, suggestion.text)
+      .run();
+
+    // Rebuild the remaining decorations from their now-mapped positions,
+    // dropping the accepted note.
+    const after = feedbackPluginKey.getState(editor.state);
+    const remaining: FeedbackDecoration[] = (after?.find() ?? [])
+      .filter((d) => d.spec?.id !== item.id)
+      .map((d) => ({
+        id: d.spec.id,
+        from: d.from,
+        to: d.to,
+        severity: d.spec.severity,
+      }));
+    editor.view.dispatch(
+      editor.state.tr.setMeta(feedbackPluginKey, remaining),
     );
-    if (!el || !containerRef.current) {
-      setHovered(null);
+
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    setHovered(null);
+  }
+
+  function cancelClose() {
+    if (closeTimer.current !== null) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }
+
+  function scheduleClose() {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setHovered(null), 150);
+  }
+
+  function handleMouseOver(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-feedback-popover]")) {
+      cancelClose();
       return;
     }
+    const el = target.closest<HTMLElement>("[data-feedback-id]");
+    if (!el || !containerRef.current) {
+      scheduleClose();
+      return;
+    }
+    cancelClose();
     const item = items.find((f) => f.id === el.getAttribute("data-feedback-id"));
     if (!item) return;
     const c = containerRef.current.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    setHovered({ item, top: r.bottom - c.top + 4, left: r.left - c.left });
+    setHovered({ item, top: r.bottom - c.top + 2, left: r.left - c.left });
   }
 
   return (
@@ -120,19 +174,42 @@ export default function Editor() {
         ref={containerRef}
         className="relative"
         onMouseOver={handleMouseOver}
-        onMouseLeave={() => setHovered(null)}
+        onMouseLeave={scheduleClose}
       >
         <EditorContent editor={editor} />
 
         {hovered && (
           <div
-            className="pointer-events-none absolute z-10 max-w-xs rounded-md bg-neutral-900 px-3 py-2 text-sm text-white shadow-lg dark:bg-neutral-700"
+            data-feedback-popover
+            className="absolute z-10 w-72 rounded-md border border-neutral-200 bg-white p-3 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
             style={{ top: hovered.top, left: hovered.left }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
           >
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-neutral-400">
+            <span className="block text-xs font-medium uppercase tracking-wide text-neutral-500">
               {hovered.item.severity}
             </span>
-            {hovered.item.comment}
+            <p className="mt-1">{hovered.item.comment}</p>
+
+            {hovered.item.suggestions.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <p className="text-xs font-medium text-neutral-500">
+                  Suggested rewrites
+                </p>
+                {hovered.item.suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => acceptSuggestion(hovered.item, s)}
+                    className="block w-full rounded border border-neutral-200 p-2 text-left transition-colors hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
+                  >
+                    <span className="text-xs font-medium text-neutral-500">
+                      {s.style}
+                    </span>
+                    <span className="mt-0.5 block">{s.text}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -149,7 +226,8 @@ export default function Editor() {
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         {!error && !loading && items.length === 0 && (
           <p className="mt-3 text-sm text-neutral-500">
-            Feedback will appear as colored, hoverable highlights in your text.
+            Feedback appears as colored highlights — hover one to read it and
+            accept a rewrite.
           </p>
         )}
       </div>
