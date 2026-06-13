@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "writer",
+  title: "redline",
   description: "AI assisted writing",
 };
 
