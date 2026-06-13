@@ -1,9 +1,9 @@
-# Writer
+# Redline
 
 A proof-of-concept writing app with AI feedback. You write in a
-distraction-free editor, and as you pause, the app surfaces inline editorial
+distraction-free editor, and as you pause, Redline surfaces inline editorial
 notes anchored to specific spans of your text with suggested rewrites you
-can accept with a click.
+can accept with a click — like an editor's redlines, in real time.
 
 ## What it does
 
