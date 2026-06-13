@@ -12,7 +12,7 @@ import FeedbackPanel, {
 } from "./feedback-panel";
 import { useFeedback, SKIP_REGEN_META } from "./use-feedback";
 
-type Pinned = { item: FeedbackItem; top: number; left: number };
+type Pinned = { id: string; top: number; left: number };
 
 const EXAMPLE_TEXT = `
 <p><strong>Introducing Relay: Webhooks That Don't Drop</strong></p>
@@ -70,10 +70,8 @@ export default function Editor() {
         setPinned(null);
         return;
       }
-      const item = items.find(
-        (f) => f.id === el.getAttribute("data-feedback-id"),
-      );
-      if (!item) {
+      const id = el.getAttribute("data-feedback-id");
+      if (!id || !items.some((f) => f.id === id)) {
         setPinned(null);
         return;
       }
@@ -83,7 +81,7 @@ export default function Editor() {
         Math.min(e.clientX - c.left, c.width - FEEDBACK_PANEL_WIDTH),
       );
       const top = e.clientY - c.top + 12;
-      setPinned({ item, top, left });
+      setPinned({ id, top, left });
     }
 
     function onKey(e: KeyboardEvent) {
@@ -124,6 +122,10 @@ export default function Editor() {
     setPinned(null);
   }
 
+  const pinnedItem = pinned
+    ? items.find((item) => item.id === pinned.id)
+    : undefined;
+
   return (
     <div>
       {loading && (
@@ -136,13 +138,14 @@ export default function Editor() {
       <div ref={containerRef} className="relative">
         <EditorContent editor={editor} />
 
-        {pinned && (
+        {pinned && pinnedItem && (
           <FeedbackPanel
-            item={pinned.item}
+            item={pinnedItem}
             top={pinned.top}
             left={pinned.left}
+            streaming={loading}
             onClose={() => setPinned(null)}
-            onAccept={(s) => acceptSuggestion(pinned.item, s)}
+            onAccept={(s) => acceptSuggestion(pinnedItem, s)}
           />
         )}
       </div>

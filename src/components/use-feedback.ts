@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import type { Transaction } from "@tiptap/pm/state";
+import type { ResolvedStreamItem } from "@/lib/feedback-stream";
 import {
   buildTextAndMap,
   feedbackPluginKey,
@@ -10,7 +11,7 @@ import {
 } from "./feedback-extension";
 import type { FeedbackItem } from "./feedback-panel";
 
-const DEBOUNCE_MS = 2500; // generate this long after the user stops typing
+const DEBOUNCE_MS = 1000; // generate this long after the user stops typing
 const MIN_INTERVAL_MS = 6000; // never auto-generate more often than this
 
 /** Set this meta on a transaction to keep it from scheduling a regeneration
@@ -22,6 +23,74 @@ type Options = {
    * Deferred runs resume when `resume()` is called. */
   shouldDefer?: () => boolean;
 };
+
+function toFeedbackItems(feedback: ResolvedStreamItem[]): FeedbackItem[] {
+  return feedback.map((f, i) => ({ id: `fb-${i}`, ...f }));
+}
+
+function buildDecorations(
+  items: FeedbackItem[],
+  map: number[],
+  docSize: number,
+): FeedbackDecoration[] {
+  return items.flatMap((item) => {
+    if (!item.range) return [];
+    const { start, end } = item.range;
+    if (start < 0 || end > map.length || start >= end) return [];
+    const from = map[start];
+    const to = map[end - 1]! + 1;
+    if (from == null || to == null || to > docSize) return [];
+    return [
+      {
+        id: item.id,
+        from,
+        to,
+        severity: item.severity,
+        quote: item.quote,
+      },
+    ];
+  });
+}
+
+async function consumeFeedbackStream(
+  res: Response,
+  onEvent: (event: string, data: unknown) => void,
+  signal: AbortSignal,
+) {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event: ")) event = line.slice(7);
+        else if (line.startsWith("data: ")) data = line.slice(6);
+      }
+
+      if (data) onEvent(event, JSON.parse(data));
+      boundary = buffer.indexOf("\n\n");
+    }
+
+    if (signal.aborted) {
+      reader.cancel();
+      break;
+    }
+  }
+}
 
 /**
  * Owns the feedback lifecycle: debounced auto-generation as the user types, the
@@ -42,6 +111,23 @@ export function useFeedback(editor: Editor | null, options: Options = {}) {
   useEffect(() => {
     shouldDeferRef.current = options.shouldDefer;
   }, [options.shouldDefer]);
+
+  const applyFeedback = useCallback(
+    (feedback: ResolvedStreamItem[], map: number[]) => {
+      if (!editor) return;
+      const nextItems = toFeedbackItems(feedback);
+      setItems(nextItems);
+      const decorations = buildDecorations(
+        nextItems,
+        map,
+        editor.state.doc.content.size,
+      );
+      editor.view.dispatch(
+        editor.state.tr.setMeta(feedbackPluginKey, decorations),
+      );
+    },
+    [editor],
+  );
 
   const generate = useCallback(
     async (force = false) => {
@@ -71,49 +157,47 @@ export function useFeedback(editor: Editor | null, options: Options = {}) {
 
       setLoading(true);
       setError(null);
+      setItems([]);
+      editor.view.dispatch(
+        editor.state.tr.setMeta(feedbackPluginKey, []),
+      );
 
       try {
         const res = await fetch("/api/feedback", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
           body: JSON.stringify({ content: text }),
           signal: controller.signal,
         });
-        const data = await res.json();
+
         if (!res.ok) {
-          setError(data.error ?? "Something went wrong.");
+          const data = await res.json().catch(() => ({}));
+          setError(
+            (data as { error?: string }).error ?? "Something went wrong.",
+          );
           return;
         }
 
-        // If the doc changed while we waited, `map`'s positions are stale —
-        // discard. The edit that changed it already scheduled a fresh run.
-        if (editor.state.doc !== docAtSend) return;
+        await consumeFeedbackStream(
+          res,
+          (event, data) => {
+            if (editor.state.doc !== docAtSend) return;
 
-        const nextItems: FeedbackItem[] = (
-          data.feedback as Omit<FeedbackItem, "id">[]
-        ).map((f, i) => ({ id: `fb-${i}`, ...f }));
-        setItems(nextItems);
+            if (event === "error") {
+              setError((data as { error?: string }).error ?? "Something went wrong.");
+              return;
+            }
 
-        const docSize = editor.state.doc.content.size;
-        const decorations: FeedbackDecoration[] = nextItems.flatMap((item) => {
-          if (!item.range) return [];
-          const { start, end } = item.range;
-          if (start < 0 || end > map.length || start >= end) return [];
-          const from = map[start];
-          const to = map[end - 1] + 1;
-          if (from == null || to == null || to > docSize) return [];
-          return [
-            {
-              id: item.id,
-              from,
-              to,
-              severity: item.severity,
-              quote: item.quote,
-            },
-          ];
-        });
-        editor.view.dispatch(
-          editor.state.tr.setMeta(feedbackPluginKey, decorations),
+            if (event === "partial") {
+              const feedback = (data as { feedback: ResolvedStreamItem[] })
+                .feedback;
+              applyFeedback(feedback, map);
+            }
+          },
+          controller.signal,
         );
       } catch (e) {
         if ((e as Error).name === "AbortError") return; // superseded — ignore
@@ -126,7 +210,7 @@ export function useFeedback(editor: Editor | null, options: Options = {}) {
         }
       }
     },
-    [editor],
+    [editor, applyFeedback],
   );
 
   // Debounced trigger, respecting a minimum interval between runs.

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import {
+  encodeSse,
+  parseStreamingFeedback,
+} from "@/lib/feedback-stream";
 
 export const runtime = "nodejs";
 
@@ -68,27 +72,6 @@ Rules for each note:
 
 Only comment on spans that genuinely warrant a note. If the writing is strong, return fewer notes. Return an empty list if there is nothing worth saying.`;
 
-type Suggestion = z.infer<typeof SuggestionSchema>;
-
-type ResolvedFeedback = {
-  quote: string;
-  comment: string;
-  severity: z.infer<typeof Severity>;
-  suggestions: Suggestion[];
-  /** Character offsets into the submitted content, or null if the quote couldn't be located. */
-  range: { start: number; end: number } | null;
-};
-
-/** Locate a verbatim quote in the content and return its character range. */
-function resolveRange(
-  content: string,
-  quote: string,
-): { start: number; end: number } | null {
-  const start = content.indexOf(quote);
-  if (start === -1) return null;
-  return { start, end: start + quote.length };
-}
-
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -107,52 +90,76 @@ export async function POST(request: NextRequest) {
 
   const { content } = parsed.data;
 
-  let response;
-  try {
-    response = await client.messages.parse({
-      model: "claude-sonnet-4-6",
-      max_tokens: 16000,
-      output_config: {
-        effort: "low",
-        format: zodOutputFormat(ModelFeedback),
-      },
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Give feedback on the following document:\n\n${content}`,
-        },
-      ],
-    });
-  } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      return NextResponse.json(
-        { error: "Feedback generation failed", status: error.status },
-        { status: 502 },
-      );
-    }
-    throw error;
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (event: Parameters<typeof encodeSse>[0]) => {
+        controller.enqueue(encoder.encode(encodeSse(event)));
+      };
 
-  if (response.stop_reason === "refusal") {
-    return NextResponse.json(
-      { error: "The model declined to generate feedback for this content." },
-      { status: 422 },
-    );
-  }
+      let jsonBuf = "";
+      let lastSnapshot = "";
 
-  const result = response.parsed_output;
-  if (!result) {
-    return NextResponse.json(
-      { error: "Could not parse feedback from the model response." },
-      { status: 502 },
-    );
-  }
+      try {
+        const messageStream = client.messages.stream(
+          {
+            model: "claude-sonnet-4-6",
+            max_tokens: 16000,
+            output_config: {
+              effort: "low",
+              format: zodOutputFormat(ModelFeedback),
+            },
+            system: SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: `Give feedback on the following document:\n\n${content}`,
+              },
+            ],
+          },
+          { signal: request.signal },
+        );
 
-  const feedback: ResolvedFeedback[] = result.feedback.map((item) => ({
-    ...item,
-    range: resolveRange(content, item.quote),
-  }));
+        messageStream.on("text", (_delta, snapshot) => {
+          jsonBuf = snapshot;
+          const feedback = parseStreamingFeedback(jsonBuf, content);
+          const snapshotKey = JSON.stringify(feedback);
+          if (snapshotKey === lastSnapshot) return;
+          lastSnapshot = snapshotKey;
+          send({ type: "partial", feedback });
+        });
 
-  return NextResponse.json({ feedback });
+        const finalMessage = await messageStream.finalMessage();
+
+        if (finalMessage.stop_reason === "refusal") {
+          send({
+            type: "error",
+            error: "The model declined to generate feedback for this content.",
+          });
+          return;
+        }
+
+        const feedback = parseStreamingFeedback(jsonBuf, content);
+        send({ type: "partial", feedback });
+        send({ type: "done" });
+      } catch (error) {
+        if (request.signal.aborted) return;
+        if (error instanceof Anthropic.APIError) {
+          send({ type: "error", error: "Feedback generation failed." });
+          return;
+        }
+        send({ type: "error", error: "Feedback generation failed." });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
 }

@@ -1,21 +1,17 @@
 # Writer
 
-A proof-of-concept writing app with AI-assisted feedback. You write in a
+A proof-of-concept writing app with AI feedback. You write in a
 distraction-free editor, and as you pause, the app surfaces inline editorial
 notes anchored to specific spans of your text with suggested rewrites you
 can accept with a click.
 
-> ⚠️ This is a POC, not a production app. It favors clarity over completeness,
-> makes a fresh model call on each generation, and has no auth, persistence, or
-> rate limiting.
-
 ## What it does
 
-- **Automatic feedback** — a beat after you stop typing, the app sends your text
-  to Claude and gets back notes anchored to exact spans. Notes appear as colored
+- **Automatic feedback** — after you stop typing, the app sends your text
+  to Claude and gets back notes anchored to spans. Notes appear as colored
   inline highlights (orange = suggestion, red = issue).
 - **Click to review** — click a highlight to open a pinned panel showing the
-  note plus two suggested rewrites in different styles.
+  note plus suggested rewrites in different styles.
 - **Accept a rewrite** — accepting replaces the highlighted span in place.
 - **Stays in sync** — a note disappears if you edit its text (the feedback no
   longer applies), and accepting a rewrite doesn't trigger a new round of
@@ -59,18 +55,5 @@ can accept with a click.
 
 4. Open [http://localhost:3000](http://localhost:3000) and start writing. After
    you pause, feedback highlights will appear; click one to review and accept a
-   rewrite. (You can also click **Refresh feedback** to regenerate on demand.)
+   rewrite.
 
-## Scripts
-
-| Command         | Description                  |
-| --------------- | ---------------------------- |
-| `npm run dev`   | Start the development server |
-| `npm run build` | Production build             |
-| `npm run start` | Serve the production build   |
-| `npm run lint`  | Run ESLint                   |
-
-## Tech stack
-
-Next.js (App Router) · TypeScript · Tailwind CSS · Tiptap / ProseMirror ·
-Anthropic Claude API

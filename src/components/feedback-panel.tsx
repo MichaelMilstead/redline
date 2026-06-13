@@ -23,6 +23,7 @@ type Props = {
   item: FeedbackItem;
   top: number;
   left: number;
+  streaming?: boolean;
   onClose: () => void;
   onAccept: (suggestion: Suggestion) => void;
 };
@@ -31,6 +32,7 @@ export default function FeedbackPanel({
   item,
   top,
   left,
+  streaming = false,
   onClose,
   onAccept,
 }: Props) {
@@ -62,8 +64,9 @@ export default function FeedbackPanel({
           {item.suggestions.map((s, i) => (
             <button
               key={i}
+              disabled={streaming || !s.text}
               onClick={() => onAccept(s)}
-              className="block w-full rounded border border-neutral-200 p-2 text-left transition-colors hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
+              className="block w-full rounded border border-neutral-200 p-2 text-left transition-colors enabled:hover:border-neutral-400 enabled:hover:bg-neutral-50 disabled:opacity-60 dark:border-neutral-700 dark:enabled:hover:bg-neutral-700"
             >
               <span className="text-xs font-medium text-neutral-500">
                 {s.style}
