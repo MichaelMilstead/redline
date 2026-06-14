@@ -131,7 +131,7 @@ export default function Editor() {
       {loading && (
         <div className="fixed right-4 top-4 z-50 flex items-center gap-2 text-xs font-medium text-sky-400/80">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400/80" />
-          Generating feedback…
+          reviewing…
         </div>
       )}
 
