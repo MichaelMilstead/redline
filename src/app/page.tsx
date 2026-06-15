@@ -4,6 +4,9 @@ export default function Home() {
   return (
     <main className="min-h-screen w-full">
       <div className="mx-auto max-w-2xl px-6 py-16">
+        <h1 className="mb-4 text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Redline - natural AI writing review
+        </h1>
         <div className="mb-10 space-y-3 text-sm text-neutral-500">
           <p>
             Try adding a sentence to the example text below, or replace it with your own. Feedback will be generated after you stop typing.
