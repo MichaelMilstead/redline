@@ -9,8 +9,8 @@ export default function Home() {
         </h1>
         <div className="mb-10 space-y-3 text-sm text-neutral-500">
           <p>
-            Try adding a sentence to the example text below, or replace it with your own. Feedback will be generated after you stop typing.
-            Click on the highlighted text to see the feedback and suggested rewrites. - Michael
+            Try editing the example blog post below, or replace it with your own text. Feedback will be generated after you stop editing.
+            Click on the resulting highlighted text to see the feedback and suggested rewrites. - Michael
           </p>
         </div>
 
