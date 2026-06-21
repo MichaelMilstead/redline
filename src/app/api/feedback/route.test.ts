@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import type { NextRequest } from "next/server";
 import { MAX_CONTENT_CHARS } from "@/lib/feedback-stream";
 
 // route.ts constructs `new Anthropic()` at import time, which needs an API key.
@@ -6,18 +7,18 @@ import { MAX_CONTENT_CHARS } from "@/lib/feedback-stream";
 // before any network call, so the key is never used.
 process.env.ANTHROPIC_API_KEY ??= "test-key";
 
-let POST: (request: Request) => Promise<Response>;
+let POST: (request: NextRequest) => Promise<Response>;
 
 beforeAll(async () => {
   ({ POST } = await import("./route"));
 });
 
-function post(body: unknown) {
+function post(body: unknown): NextRequest {
   return new Request("http://localhost/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
-  });
+  }) as unknown as NextRequest;
 }
 
 describe("POST /api/feedback — input validation", () => {
@@ -47,7 +48,7 @@ describe("POST /api/feedback — input validation", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "a".repeat(MAX_CONTENT_CHARS + 100) }),
       signal: AbortSignal.abort(),
-    });
+    }) as unknown as NextRequest;
     const res = await POST(req);
     expect(res.status).not.toBe(413);
   });

@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
 import { Feedback, feedbackPluginKey } from "./feedback-extension";
+import { MaxLength } from "./max-length";
 import FeedbackPanel, {
   FEEDBACK_PANEL_WIDTH,
   type FeedbackItem,
@@ -29,8 +30,11 @@ export default function Editor() {
       StarterKit,
       Placeholder.configure({ placeholder: "Start writing…" }),
       Feedback,
-      // Hard cap: blocks typing past the limit and truncates over-limit pastes.
-      CharacterCount.configure({ limit: MAX_CONTENT_CHARS }),
+      CharacterCount, // counting only — enforcement is handled by MaxLength
+      // Cap the doc at the limit by trimming overflow from the end, so pasting
+      // long text keeps the first MAX_CONTENT_CHARS chars (CharacterCount's own
+      // limit rejects over-limit multi-paragraph pastes outright).
+      MaxLength.configure({ limit: MAX_CONTENT_CHARS }),
     ],
     content: EXAMPLE_TEXT,
     immediatelyRender: false,
