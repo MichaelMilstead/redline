@@ -13,7 +13,7 @@ export default function Home() {
             Click on the resulting highlighted text to see the feedback and suggested rewrites. - Michael
           </p>
           <p>
-            As a proof of concept, input is capped at ~5,000 characters to keep
+            As a proof of concept, input is capped at 5,000 characters to keep
             reviews fast and focused.
           </p>
         </div>
