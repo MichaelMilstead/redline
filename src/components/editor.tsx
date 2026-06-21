@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
@@ -135,7 +135,14 @@ export default function Editor() {
     ? items.find((item) => item.id === pinned.id)
     : undefined;
 
-  const characterCount = editor?.storage.characterCount.characters() ?? 0;
+  // Subscribe to the editor so the counter updates on every transaction —
+  // reading editor.storage in render alone wouldn't re-render on keystrokes.
+  const characterCount =
+    useEditorState({
+      editor,
+      selector: ({ editor }) =>
+        editor?.storage.characterCount.characters() ?? 0,
+    }) ?? 0;
   const atLimit = characterCount >= MAX_CONTENT_CHARS;
 
   return (
