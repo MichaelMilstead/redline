@@ -1,5 +1,9 @@
 import { parse as partialParse } from "partial-json";
 
+/** Hard cap on input length for this POC. Counts document text characters
+ *  (matches the editor's CharacterCount), not payload bytes. */
+export const MAX_CONTENT_CHARS = 5000;
+
 export type StreamSuggestion = { style?: string; text?: string };
 
 export type StreamFeedbackItem = {

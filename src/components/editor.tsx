@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import CharacterCount from "@tiptap/extension-character-count";
 import { Feedback, feedbackPluginKey } from "./feedback-extension";
 import FeedbackPanel, {
   FEEDBACK_PANEL_WIDTH,
@@ -11,6 +12,7 @@ import FeedbackPanel, {
   type Suggestion,
 } from "./feedback-panel";
 import { useFeedback, SKIP_REGEN_META } from "./use-feedback";
+import { MAX_CONTENT_CHARS } from "@/lib/feedback-stream";
 
 type Pinned = { id: string; top: number; left: number };
 
@@ -27,6 +29,8 @@ export default function Editor() {
       StarterKit,
       Placeholder.configure({ placeholder: "Start writing…" }),
       Feedback,
+      // Hard cap: blocks typing past the limit and truncates over-limit pastes.
+      CharacterCount.configure({ limit: MAX_CONTENT_CHARS }),
     ],
     content: EXAMPLE_TEXT,
     immediatelyRender: false,
@@ -127,6 +131,9 @@ export default function Editor() {
     ? items.find((item) => item.id === pinned.id)
     : undefined;
 
+  const characterCount = editor?.storage.characterCount.characters() ?? 0;
+  const atLimit = characterCount >= MAX_CONTENT_CHARS;
+
   return (
     <div>
       {loading && (
@@ -150,6 +157,17 @@ export default function Editor() {
           />
         )}
       </div>
+
+      {editor && (
+        <p
+          className={`mt-3 text-xs ${atLimit ? "text-amber-600" : "text-neutral-500"}`}
+        >
+          {characterCount.toLocaleString()} /{" "}
+          {MAX_CONTENT_CHARS.toLocaleString()} characters
+          {atLimit &&
+            " — character limit reached; this proof-of-concept caps input length."}
+        </p>
+      )}
     </div>
   );
 }

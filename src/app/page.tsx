@@ -12,6 +12,10 @@ export default function Home() {
             Try editing the example blog post below, or replace it with your own text. Feedback will be generated after you stop editing.
             Click on the resulting highlighted text to see the feedback and suggested rewrites. - Michael
           </p>
+          <p>
+            As a proof of concept, input is capped at ~5,000 characters to keep
+            reviews fast and focused.
+          </p>
         </div>
 
         <Editor />

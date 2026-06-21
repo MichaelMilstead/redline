@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   encodeSse,
   parseStreamingFeedback,
+  MAX_CONTENT_CHARS,
 } from "@/lib/feedback-stream";
 
 export const runtime = "nodejs";
@@ -70,7 +71,7 @@ Rules for each note:
 - "severity" is "suggestion" for an optional improvement or "issue" for a real problem.
 - "suggestions": provide exactly 2 rewrites of the quoted span, each taking a clearly different stylistic approach (for example one more concise and one more vivid, or one formal and one plain). You can generate only one if both would be identical. Each suggestion's "text" must be a drop-in replacement for the quoted span — it should read naturally in place of the quote, with no surrounding context.
 
-Only comment on spans that genuinely warrant a note. If the writing is strong, return fewer notes. Return an empty list if there is nothing worth saying.`;
+Comment on every span that genuinely warrants a note — aim for thorough coverage across the whole document, not just a handful of highlights. Skip spans that are already strong, and return an empty list only if there is genuinely nothing worth saying.`;
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -89,6 +90,16 @@ export async function POST(request: NextRequest) {
   }
 
   const { content } = parsed.data;
+
+  // Abuse backstop only — the editor hard-caps input client-side. The payload
+  // adds "\n\n" between paragraphs, so allow generous slack over the char cap.
+  const MAX_PAYLOAD_CHARS = Math.ceil(MAX_CONTENT_CHARS * 1.5);
+  if (content.length > MAX_PAYLOAD_CHARS) {
+    return NextResponse.json(
+      { error: "Input exceeds the length limit for this proof-of-concept." },
+      { status: 413 },
+    );
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
